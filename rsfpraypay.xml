@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension version="3.0" type="plugin" group="system" method="upgrade">
+	<name>RayPay for RSForm Pro</name>
+	<title>RSForm! RayPay</title>
+	<author>hanieh729 , Publisher: Saminray</author>
+	<creationDate>June 2021</creationDate>
+	<copyright>Copyright 2021 RayPay</copyright>
+	<license>http://www.gnu.org/licenses/gpl-2.0.html GPLv2 or later</license>
+	<authorEmail>info@saminray.com</authorEmail>
+	<authorUrl>https://saminray.com</authorUrl>
+	<version>1.0</version>
+	<description>پلاگین پرداخت رای پی برای RSForm Pro </description>
+	<scriptfile>script.php</scriptfile>
+	<install>
+		<sql>
+			<file driver="mysql" charset="utf8">sql/mysql/install.sql</file>
+		</sql>
+	</install>
+	<files>
+		<folder>sql</folder>
+		<folder>assets</folder>
+		<filename plugin="rsfpraypay">rsfpraypay.php</filename>
+	</files>
+	<updateservers>
+        <server type="extension" priority="1" name="System - RayPay for RSForm">https://raypay.ir/plugins</server>
+    </updateservers>
+</extension>
