@@ -137,11 +137,12 @@ class plgSystemRSFPRayPay extends JPlugin
 
     if ($nPrice > 100) {
       $user_id = RSFormProHelper::getConfig('raypay.user_id');
-      $acceptor_code = RSFormProHelper::getConfig('raypay.acceptor_code');
+      $marketing_id = RSFormProHelper::getConfig('raypay.marketing_id');
+      $sandbox = !(RSFormProHelper::getConfig('raypay.sandbox') == 'no');
       $amount = $nPrice;
       $desc = 'پرداخت سفارش شماره: ' . $formId;
       $invoice_id             = round(microtime(true) * 1000);
-      $callback = JURI::root() . 'index.php?option=com_rsform&task=plugin&plugin_task=raypay.notify&code=' . $code . '&order_id=' . $formId . '&';
+      $callback = JURI::root() . 'index.php?option=com_rsform&task=plugin&plugin_task=raypay.notify&code=' . $code . '&order_id=' . $formId;
       if (empty($amount)) {
         $msg = 'واحد پول انتخاب شده پشتیبانی نمی شود.';
         $link = JURI::root() . 'index.php?option=com_rsform&formId=' . $formId;
@@ -154,11 +155,12 @@ class plgSystemRSFPRayPay extends JPlugin
             'userID'       => $user_id,
             'redirectUrl'  => $callback,
             'factorNumber' => strval($formId),
-            'acceptorCode' => $acceptor_code,
+            'marketingID' => $marketing_id,
+            'enableSandBox'      => $sandbox,
             'comment'      => $desc
         );
 
-        $url  = 'https://api.raypay.ir/raypay/api/v1/Payment/getPaymentTokenWithUserID';
+        $url  = 'https://api.raypay.ir/raypay/api/v1/Payment/pay';
 		$options = array('Content-Type: application/json');
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
@@ -184,21 +186,14 @@ class plgSystemRSFPRayPay extends JPlugin
       if ($http_status != 200 || empty($result) || empty($result->Data)) {
         $msg         = sprintf('خطا هنگام ایجاد تراکنش. کد خطا: %s - پیام خطا: %s', $http_status, $result->Message);
         $link = JURI::root() . 'index.php?option=com_rsform&formId=' . $formId;
-        $this->updateAfterEvent($formId, $SubmissionId, $this->otherStatusMessages($result->status));
+        $this->updateAfterEvent($formId, $SubmissionId, $msg);
         $app->redirect($link, '<h2>' . $msg . '</h2>', $msgType = 'Error');
       }
 
-        $access_token = $result->Data->Accesstoken;
-        $terminal_id  = $result->Data->TerminalID;
+        $token = $result->Data;
+        $raypayLink='https://my.raypay.ir/ipg?token=' . $token;
+        $app->redirect($raypayLink);
 
-
-        echo '<p style="color:#ff0000; font:18px Tahoma; direction:rtl;">در حال اتصال به درگاه بانکی. لطفا صبر کنید ...</p>';
-        echo '<form name="frmRayPayPayment" method="post" action=" https://mabna.shaparak.ir:8080/Pay ">';
-        echo '<input type="hidden" name="TerminalID" value="' . $terminal_id . '" />';
-        echo '<input type="hidden" name="token" value="' . $access_token . '" />';
-        echo '<input class="submit" type="submit" value="پرداخت" /></form>';
-        echo '<script>document.frmRayPayPayment.submit();</script>';
-        exit();
     }
     else {
 
@@ -217,7 +212,6 @@ class plgSystemRSFPRayPay extends JPlugin
       $app = JFactory::getApplication();
       $jinput = $app->input;
 
-      $invoiceId = $jinput->get->get('?invoiceID', '', 'STRING');
       $orderId = $jinput->get->get('order_id', '', 'STRING');
       $code = $jinput->get->get('code', '', 'STRING');
       $db = JFactory::getDBO();
@@ -240,14 +234,12 @@ class plgSystemRSFPRayPay extends JPlugin
       $price = $this->rsfp_raypay_get_amount($price, $currency);
 
 
-      if (!empty($invoiceId) && !empty($orderId)) {
-
-          $data = array('order_id' => $orderId);
-          $url = 'https://api.raypay.ir/raypay/api/v1/Payment/checkInvoice?pInvoiceID=' . $invoiceId;
+      if (!empty($orderId)) {
+          $url = 'https://api.raypay.ir/raypay/api/v1/Payment/verify';
 		  $options = array('Content-Type: application/json');
 		  $ch = curl_init();
 		  curl_setopt($ch, CURLOPT_URL, $url);
-		  curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+		  curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($_POST));
 		  curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
 		  curl_setopt($ch, CURLOPT_HTTPHEADER,$options );
 		  $result = curl_exec($ch);
@@ -267,8 +259,9 @@ class plgSystemRSFPRayPay extends JPlugin
             $app->redirect($link, '<h2>' . $msg . '</h2>', $msgType = 'Error');
           }
 
-          $state           = $result->Data->State;
+          $state           = $result->Data->Status;
           $verify_order_id = $result->Data->FactorNumber;
+          $verify_invoice_id = $result->Data->InvoiceID;
           $verify_amount   = $result->Data->Amount;
 
           if ($state === 1)
@@ -282,7 +275,7 @@ class plgSystemRSFPRayPay extends JPlugin
 
           //failed verify
           if ( empty($verify_order_id) || empty($verify_amount) || $state !== 1) {
-            $msg  = 'پرداخت ناموفق بوده است. شناسه ارجاع بانکی رای پی : ' . $invoiceId;
+            $msg  = 'پرداخت ناموفق بوده است. شناسه ارجاع بانکی رای پی : ' . $verify_invoice_id;
             $this->updateAfterEvent($orderId, $SubmissionId, $msg);
             $link = JURI::root() . 'index.php?option=com_rsform&formId=' . $orderId;
             $app->redirect($link, '<h2>' . $msg . '</h2>', $msgType = 'Error');
@@ -291,7 +284,7 @@ class plgSystemRSFPRayPay extends JPlugin
           } else {
             $mainframe = JFactory::getApplication();
             $mainframe->triggerEvent('rsfp_afterConfirmPayment', array($SubmissionId));
-            $msgForSaveDataTDataBase = ' پرداخت موفق از طریق درگاه پرداخت رای پی . شناسه ارجاع بانکی : ' . $invoiceId;
+            $msgForSaveDataTDataBase = ' پرداخت موفق از طریق درگاه پرداخت رای پی . شناسه ارجاع بانکی : ' . $verify_invoice_id;
             $this->updateAfterEvent($orderId, $SubmissionId, $msgForSaveDataTDataBase);
             $msg  = 'پرداخت شما با موفقیت انجام شد.';
             $link = JURI::root() . 'index.php?option=com_rsform&formId=' . $orderId;
@@ -329,11 +322,26 @@ class plgSystemRSFPRayPay extends JPlugin
               </tr>
               <tr>
                   <td width="200" style="width: 200px;" align="right" class="key"><label
-                              for="acceptor_code"><?php echo 'کد پذیرنده'; ?></label></td>
-                  <td><input type="text" name="rsformConfig[raypay.acceptor_code]"
-                             value="<?php echo RSFormProHelper::htmlEscape(RSFormProHelper::getConfig('raypay.acceptor_code')); ?>"
+                              for="marketing_id"><?php echo 'شناسه کسب و کار'; ?></label></td>
+                  <td><input type="text" name="rsformConfig[raypay.marketing_id]"
+                             value="<?php echo RSFormProHelper::htmlEscape(RSFormProHelper::getConfig('raypay.marketing_id')); ?>"
                              size="100" maxlength="64"></td>
               </tr>
+              <tr>
+                  <td width="200" style="width: 200px;" align="right" class="key">
+                      <label><?php echo 'فعالسازی SandBox'; ?></label></td>
+                  <td>
+                      <select name="rsformConfig[raypay.sandbox]">
+                          <option value="yes"<?php echo(RSFormProHelper::htmlEscape(RSFormProHelper::getConfig('raypay.sandbox')) == 'yes' ? 'selected="selected"' : ""); ?>>
+                              بله
+                          </option>
+                          <option value="no"<?php echo(RSFormProHelper::htmlEscape(RSFormProHelper::getConfig('raypay.sandbox')) == 'no' ? 'selected="selected"' : ""); ?>>
+                              خیر
+                          </option>
+                      </select>
+                  </td>
+
+              <tr>
               <tr>
                   <td width="200" style="width: 200px;" align="right" class="key">
                       <label><?php echo 'واحد پول'; ?></label></td>

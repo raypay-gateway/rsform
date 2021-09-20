@@ -1,6 +1,7 @@
 INSERT IGNORE INTO `#__rsform_config` (`SettingName`, `SettingValue`) VALUES
 ('raypay.user_id', ''),
-('raypay.acceptor_code', ''),
+('raypay.marketing_id', ''),
+('raypay.sandbox', ''),
 ('raypay.currency', '');
 
 INSERT IGNORE INTO `#__rsform_component_types` (`ComponentTypeId`, `ComponentTypeName`) VALUES (800, 'raypay');
